@@ -12,3 +12,4 @@ class SimulationConfig(BaseModel):
     start_date: date
     end_date: date
     order_count: int
+    scenario_type: str = "minimal_lifecycle_v1"
