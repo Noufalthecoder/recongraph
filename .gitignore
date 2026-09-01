@@ -1,0 +1,37 @@
+# Virtual environment
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest
+.pytest_cache/
+
+# Environment variables
+.env
+.env.*
+
+# Generated data (keep .gitkeep)
+data/generated/*
+!data/generated/.gitkeep
+
+# Benchmark output (keep .gitkeep)
+data/benchmarks/*
+!data/benchmarks/.gitkeep
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
