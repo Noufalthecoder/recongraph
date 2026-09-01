@@ -10,6 +10,7 @@ from simulator.config import SimulationConfig
 from backend.app.models.merchant import Merchant
 from backend.app.models.order import Order
 from backend.app.models.payment import Payment
+from backend.app.models.refund import Refund
 from backend.app.models.settlement_transaction import SettlementTransaction
 from backend.app.models.settlement import Settlement
 from backend.app.models.bank_entry import BankEntry
@@ -35,6 +36,7 @@ class GroundTruth(BaseModel):
     merchants: List[Merchant]
     orders: List[Order]
     payments: List[Payment]
+    refunds: List[Refund] = []
     settlement_transactions: List[SettlementTransaction]
     settlements: List[Settlement]
     bank_entries: List[BankEntry]

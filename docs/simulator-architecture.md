@@ -678,6 +678,8 @@ settlement_fees   = sum(stxn.fee for stxn in settlement_transactions)
 settlement_tax    = sum(stxn.tax for stxn in settlement_transactions)
 ```
 
+> **SIMULATION ASSUMPTION / V1 CONSTRAINT:** Because the V1 contract defines BankEntry strictly as a positive credit and restricts negative Settlement amounts to adjustments, a refund-only settlement (which would yield a negative total) is mathematically invalid under the current V1 synthetic constraints. The refund settlement scenario therefore requires at least one positive credit component (e.g., another Payment) in the same cycle to absorb the refund and yield a net positive settlement. This is explicitly a V1 simulation constraint and not a universal Razorpay production claim.
+
 ### 6.6 UTR Generation
 
 UTR is an external banking reference represented as a string. The simulator may generate a deterministic mock UTR.
