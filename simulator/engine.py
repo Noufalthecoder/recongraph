@@ -40,6 +40,8 @@ class Simulator:
             return self._run_many_to_one()
         if scenario == "refund_v1":
             return self._run_refund_v1()
+        if scenario == "multiple_refunds_v1":
+            return self._run_multiple_refunds_v1()
         return self._run_minimal_lifecycle()
 
     def _run_minimal_lifecycle(self) -> GroundTruth:
@@ -659,3 +661,208 @@ class Simulator:
         )
         
         return gt
+
+    def _run_multiple_refunds_v1(self) -> GroundTruth:
+        import decimal
+        from simulator.ground_truth.models import SettlementEquation
+        from backend.app.models.refund import Refund, RefundStatus, RefundSpeed
+        
+        merchant = Merchant(
+            merchant_id=self.generate_id("merch_"),
+            name="Test Merchant",
+            status=MerchantStatus.ACTIVE,
+            created_at=datetime.combine(self.config.start_date, datetime.min.time(), tzinfo=timezone.utc)
+        )
+        
+        rounding_str = getattr(self.config, "rounding_mode", "ROUND_HALF_UP")
+        rounding = getattr(decimal, rounding_str)
+        fee_rate = getattr(self.config, "fee_rate", Decimal("0.02"))
+        tax_rate = getattr(self.config, "tax_rate", Decimal("0.18"))
+        
+        orders = []
+        payments = []
+        refunds = []
+        stxns = []
+        settlements = []
+        bank_entries = []
+        labels = {}
+        equations = {}
+
+        def create_payment_and_settlement(
+            day_offset: int,
+            payment_amount: Decimal,
+            refund_amount: Decimal = Decimal("0.00"),
+            refund_against_payment: Payment = None
+        ):
+            base_time = merchant.created_at + timedelta(days=day_offset - 1, hours=1)
+            
+            order = Order(
+                order_id=self.generate_id("order_"),
+                merchant_id=merchant.merchant_id,
+                amount=payment_amount,
+                currency=Currency.INR,
+                status=OrderStatus.PAID,
+                created_at=base_time
+            )
+            orders.append(order)
+            
+            pay_time = base_time + timedelta(minutes=5)
+            cap_time = pay_time + timedelta(minutes=1)
+            
+            fee = (payment_amount * fee_rate).quantize(Decimal("0.01"), rounding=rounding)
+            tax = (fee * tax_rate).quantize(Decimal("0.01"), rounding=rounding)
+            net_amount = payment_amount - fee - tax
+            
+            setl_id = self.generate_id("setl_")
+            
+            payment = Payment(
+                payment_id=self.generate_id("pay_"),
+                order_id=order.order_id,
+                merchant_id=merchant.merchant_id,
+                amount=payment_amount,
+                currency=Currency.INR,
+                status=PaymentStatus.CAPTURED,
+                method=PaymentMethod.UPI,
+                created_at=pay_time,
+                captured_at=cap_time,
+                fee=fee,
+                tax=tax,
+                settlement_id=setl_id
+            )
+            payments.append(payment)
+            
+            stxn_time = cap_time + timedelta(days=2)
+            pay_stxn = SettlementTransaction(
+                settlement_txn_id=self.generate_id("stxn_"),
+                settlement_id=setl_id,
+                merchant_id=merchant.merchant_id,
+                entity_type=SettlementTransactionEntityType.PAYMENT,
+                entity_id=payment.payment_id,
+                amount=payment_amount,
+                fee=fee,
+                tax=tax,
+                net_amount=net_amount,
+                type=SettlementTransactionType.CREDIT,
+                created_at=stxn_time
+            )
+            stxns.append(pay_stxn)
+            
+            total_net = net_amount
+            total_fee = fee
+            total_tax = tax
+            
+            if refund_amount > Decimal("0.00") and refund_against_payment:
+                refund_time = base_time + timedelta(hours=2)
+                refund = Refund(
+                    refund_id=self.generate_id("rfnd_"),
+                    payment_id=refund_against_payment.payment_id,
+                    merchant_id=merchant.merchant_id,
+                    amount=refund_amount,
+                    currency=Currency.INR,
+                    status=RefundStatus.PROCESSED,
+                    created_at=refund_time,
+                    processed_at=refund_time + timedelta(minutes=10),
+                    speed=RefundSpeed.NORMAL,
+                    settlement_id=setl_id
+                )
+                refunds.append(refund)
+                
+                ref_net_amount = -refund_amount
+                ref_stxn = SettlementTransaction(
+                    settlement_txn_id=self.generate_id("stxn_"),
+                    settlement_id=setl_id,
+                    merchant_id=merchant.merchant_id,
+                    entity_type=SettlementTransactionEntityType.REFUND,
+                    entity_id=refund.refund_id,
+                    amount=refund_amount,
+                    fee=Decimal("0.00"),
+                    tax=Decimal("0.00"),
+                    net_amount=ref_net_amount,
+                    type=SettlementTransactionType.DEBIT,
+                    created_at=stxn_time
+                )
+                stxns.append(ref_stxn)
+                
+                total_net += ref_net_amount
+
+            setl_time = stxn_time
+            utr = self.generate_utr()
+            
+            setl = Settlement(
+                settlement_id=setl_id,
+                merchant_id=merchant.merchant_id,
+                amount=total_net,
+                currency=Currency.INR,
+                status=SettlementStatus.PROCESSED,
+                fees=total_fee,
+                tax=total_tax,
+                created_at=setl_time,
+                utr=utr,
+                settled_at=setl_time
+            )
+            settlements.append(setl)
+            
+            bank_entry_date = setl_time + timedelta(days=1)
+            bank_entry = BankEntry(
+                bank_entry_id=self.generate_id("bank_"),
+                merchant_id=merchant.merchant_id,
+                account_number="ACCT12345678",
+                amount=total_net,
+                currency=Currency.INR,
+                utr=utr,
+                transaction_date=bank_entry_date,
+                description=f"NEFT CR MOCK {setl_id}"
+            )
+            bank_entries.append(bank_entry)
+            
+            labels[setl_id] = ScenarioLabel(
+                settlement_id=setl_id,
+                scenario_type="multiple_refunds_v1"
+            )
+            
+            equations[setl_id] = SettlementEquation(
+                settlement_id=setl_id,
+                expected_amount=total_net,
+                sum_of_net_amounts=total_net,
+                total_fees=total_fee,
+                total_tax=total_tax,
+                is_balanced=True
+            )
+
+            return payment
+
+        p1 = create_payment_and_settlement(day_offset=1, payment_amount=Decimal("10000.00"))
+        
+        create_payment_and_settlement(
+            day_offset=4, 
+            payment_amount=Decimal("5000.00"), 
+            refund_amount=Decimal("2000.00"), 
+            refund_against_payment=p1
+        )
+        
+        create_payment_and_settlement(
+            day_offset=7, 
+            payment_amount=Decimal("4000.00"), 
+            refund_amount=Decimal("1500.00"), 
+            refund_against_payment=p1
+        )
+        
+        create_payment_and_settlement(
+            day_offset=10, 
+            payment_amount=Decimal("3000.00"), 
+            refund_amount=Decimal("500.00"), 
+            refund_against_payment=p1
+        )
+        
+        return GroundTruth(
+            config=self.config,
+            merchants=[merchant],
+            orders=orders,
+            payments=payments,
+            refunds=refunds,
+            settlement_transactions=stxns,
+            settlements=settlements,
+            bank_entries=bank_entries,
+            scenario_labels=labels,
+            settlement_equations=equations
+        )
