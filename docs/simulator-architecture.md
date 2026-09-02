@@ -840,6 +840,13 @@ Scenario:
 | **Auto-resolvable** | N/A |
 | **Human escalation** | No |
 
+##### Implemented Benchmark Scenario: `adjustment_v1`
+
+ReconGraph models this adjustment behavior as a deterministic synthetic scenario (`adjustment_v1`):
+- **World composition:** 1 merchant, 2 orders, 2 payments (P1: ₹10,000 gross, fee ₹200, tax ₹36, net ₹9,764; P2: ₹5,000 gross, fee ₹100, tax ₹18, net ₹4,882), 1 adjustment (A1: −₹250 debit, fee 0, tax 0), 3 settlement transactions (2 credit, 1 debit), 1 settlement (amount = ₹14,396), and 1 bank entry (amount = ₹14,396).
+- **Settlement Equation:** `Settlement.amount = SUM(SettlementTransaction.net_amount) = 9764 + 4882 - 250 = 14396`.
+- **Simulation Assumption vs Production Fact:** ReconGraph models adjustments as settlement-level line items routed through `SettlementTransaction`. In V1 synthetic benchmark tests, adjustment fee and tax are kept at zero. We do not assert that Razorpay exposes adjustments as standalone entities or applies a specific tax treatment in production.
+
 ---
 
 #### Scenario 7: Transfer
@@ -932,69 +939,75 @@ Scenario:
 
 ---
 
-## 8. Anomaly Injection
+## 8. Observed World & Anomaly Injection Layer
 
 ### 8.1 Design Principles
 
-- The anomaly injector is a **separate, independent module** from the world generator.
-- It operates on the `ObservedData` copy, never on ground truth.
-- Every anomaly is deterministic given a seed.
-- Every anomaly is recorded with a unique ID and full audit trail.
+- **Complete Decoupling:** The observation generator and anomaly injector form an independent module (`simulator/observed/`) that operates on deep copies of `GroundTruth`.
+- **Zero Ground Truth Contamination:** Ground Truth is treated as strictly read-only and immutable. It is never modified.
+- **Isolated Reconciliation Surface:** The reconciliation engine consumes only `ObservedWorld` (containing only domain entities). `AnomalyManifest` contains evaluation-only audit records and is never imported into reconciliation logic.
+- **Deterministic Synthetic Benchmark Corruptions:** Anomalies represent synthetic, reproducible benchmark corruptions for evaluation. They are not claimed to be exact production Razorpay behaviors.
 
-### 8.2 Anomaly Types
+### 8.2 Anomaly Types (V1)
 
 | Anomaly Type | Code | Operation | Target Entities |
 |---|---|---|---|
-| Remove record | `OMIT_RECORD` | Delete an entity from observed data | Payment, Refund, Transfer, Adjustment, SettlementTransaction, BankEntry |
-| Duplicate record | `DUPLICATE_RECORD` | Insert an identical copy of an entity | SettlementTransaction (most common), Payment, BankEntry |
-| Alter amount | `CORRUPT_AMOUNT` | Change a monetary field by a random delta | Payment.amount, Refund.amount, Settlement.amount, BankEntry.amount |
-| Alter timestamp | `DELAY_RECORD` | Shift a datetime field | Payment.captured_at, Settlement.settled_at, BankEntry.transaction_date |
-| Alter settlement reference | `SWAP_REFERENCE` | Change settlement_id to a different valid settlement | Payment.settlement_id, SettlementTransaction.settlement_id |
-| Alter UTR | `CORRUPT_UTR` | Change UTR to break Settlement ↔ BankEntry match | Settlement.utr, BankEntry.utr |
-| Omit field | `OMIT_FIELD` | Set an optional field to `null` | Payment.fee, Payment.tax, Settlement.utr |
-| Composite | `COMPOSITE` | Apply multiple anomaly types to the same dataset | Any |
+| Monetary Field Mismatch | `AMOUNT_MISMATCH` | Change a monetary field by a non-zero `Decimal` delta | `BankEntry.amount`, `Payment.amount`, `SettlementTransaction.amount`, etc. |
+| Omit Entity Record | `MISSING_RECORD` | Delete an entity from the observed dataset | `Payment`, `SettlementTransaction`, `BankEntry`, `Refund`, `Adjustment` |
+| Duplicate Entity Record | `DUPLICATE_RECORD` | Insert an identical copy of an entity into the observed dataset | `SettlementTransaction`, `Payment`, `BankEntry` |
+| Identifier/Reference Mismatch | `IDENTIFIER_MISMATCH` | Deterministically mutate an identifier/reference string | `BankEntry.utr`, `Settlement.utr` |
 
-### 8.3 Anomaly Record
+### 8.3 Data & Configuration Models
 
+```python
+class AnomalyType(str, Enum):
+    AMOUNT_MISMATCH = "AMOUNT_MISMATCH"
+    MISSING_RECORD = "MISSING_RECORD"
+    DUPLICATE_RECORD = "DUPLICATE_RECORD"
+    IDENTIFIER_MISMATCH = "IDENTIFIER_MISMATCH"
+
+class AnomalyRecord(BaseModel):
+    anomaly_id: str                          # e.g., "anom_0001"
+    anomaly_type: AnomalyType
+    target_entity_type: str                  # "bank_entries", "payments", etc.
+    target_entity_id: str                    # Original ID of mutated entity
+    target_field: Optional[str] = None       # Field mutated (e.g., "amount", "utr")
+    original_value: Optional[str] = None     # String representation of original value
+    observed_value: Optional[str] = None     # String representation of mutated value (None for MISSING_RECORD)
+    settlement_id: Optional[str] = None      # Settlement context if available
+    description: str
+
+class AnomalyManifest(BaseModel):
+    records: List[AnomalyRecord] = []
+    total_anomalies: int
+
+class ObservedWorld(BaseModel):
+    merchants: List[Merchant]
+    orders: List[Order]
+    payments: List[Payment]
+    refunds: List[Refund] = []
+    adjustments: List[Adjustment] = []
+    settlement_transactions: List[SettlementTransaction]
+    settlements: List[Settlement]
+    bank_entries: List[BankEntry]
+
+class ObservationConfig(BaseModel):
+    seed: int
+    anomalies_enabled: bool = False
+    anomalies: List[AnomalySpec] = []
 ```
-AnomalyRecord:
-    anomaly_id: str                    # Unique ID (e.g., "anom_001")
-    anomaly_type: str                  # OMIT_RECORD, CORRUPT_AMOUNT, etc.
-    target_entity_type: str            # "payment", "settlement", etc.
-    target_entity_id: str              # The entity ID that was modified
-    target_field: str | None           # The field that was changed (for CORRUPT_AMOUNT, etc.)
-    original_value: str | None         # The original value (serialized)
-    corrupted_value: str | None        # The new value (serialized), or None for OMIT_RECORD
-    settlement_id: str                 # The settlement affected
-    scenario_id: str                   # The scenario this anomaly belongs to
-    expected_exception_type: str       # The exception type ReconGraph should raise
-    is_resolvable: bool                # Whether the anomaly can be deterministically resolved
+
+### 8.4 Generation Algorithm & API
+
+```python
+obs_world, manifest = ObservationGenerator.generate(ground_truth, config)
 ```
 
-### 8.4 Injection Algorithm
+1. **Cloning:** Deep clones all domain entity collections from `GroundTruth`.
+2. **Clean Mode:** If `anomalies_enabled=False`, returns clean `ObservedWorld` and empty `AnomalyManifest`.
+3. **Anomaly Mode:** If `anomalies_enabled=True`, applies configured `AnomalySpec` rules in deterministic order using `random.Random(config.seed)` and sorted candidate ordering.
+4. **Output:** Returns `(ObservedWorld, AnomalyManifest)`.
 
-```
-def inject_anomalies(
-    observed_data: ObservedData,
-    anomaly_config: AnomalyConfig,
-    rng: Random,
-) -> Tuple[ObservedData, List[AnomalyRecord]]:
-    """
-    Apply controlled corruptions to observed data.
-
-    1. Select target settlements based on anomaly_rate.
-    2. For each selected settlement, choose an anomaly type.
-    3. Apply the anomaly to the relevant entities.
-    4. Record the anomaly.
-    5. Return the mutated observed data + anomaly log.
-    """
-```
-
-### 8.5 Determinism
-
-- The injector uses a `random.Random` instance seeded from the simulation seed.
-- The order of anomaly application is deterministic (sorted by settlement_id, then by anomaly type).
-- Same config + seed → same anomalies, same positions, same values.
 
 ---
 

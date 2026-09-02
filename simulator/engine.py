@@ -42,6 +42,8 @@ class Simulator:
             return self._run_refund_v1()
         if scenario == "multiple_refunds_v1":
             return self._run_multiple_refunds_v1()
+        if scenario == "adjustment_v1":
+            return self._run_adjustment_v1()
         return self._run_minimal_lifecycle()
 
     def _run_minimal_lifecycle(self) -> GroundTruth:
@@ -865,4 +867,207 @@ class Simulator:
             bank_entries=bank_entries,
             scenario_labels=labels,
             settlement_equations=equations
+        )
+
+    def _run_adjustment_v1(self) -> GroundTruth:
+        import decimal
+        from simulator.ground_truth.models import SettlementEquation
+        from backend.app.models.adjustment import Adjustment
+        
+        merchant = Merchant(
+            merchant_id=self.generate_id("merch_"),
+            name="Test Merchant",
+            status=MerchantStatus.ACTIVE,
+            created_at=datetime.combine(self.config.start_date, datetime.min.time(), tzinfo=timezone.utc)
+        )
+        
+        rounding_str = getattr(self.config, "rounding_mode", "ROUND_HALF_UP")
+        rounding = getattr(decimal, rounding_str)
+        fee_rate = getattr(self.config, "fee_rate", Decimal("0.02"))
+        tax_rate = getattr(self.config, "tax_rate", Decimal("0.18"))
+        
+        # Day 1: P1
+        p1_amount = Decimal("10000.00")
+        p1_time = merchant.created_at + timedelta(hours=1)
+        p1_order = Order(
+            order_id=self.generate_id("order_"),
+            merchant_id=merchant.merchant_id,
+            amount=p1_amount,
+            currency=Currency.INR,
+            status=OrderStatus.PAID,
+            created_at=p1_time
+        )
+        
+        p1_fee = (p1_amount * fee_rate).quantize(Decimal("0.01"), rounding=rounding)
+        p1_tax = (p1_fee * tax_rate).quantize(Decimal("0.01"), rounding=rounding)
+        p1_net = p1_amount - p1_fee - p1_tax
+        
+        setl_id = self.generate_id("setl_")
+        
+        p1_payment = Payment(
+            payment_id=self.generate_id("pay_"),
+            order_id=p1_order.order_id,
+            merchant_id=merchant.merchant_id,
+            amount=p1_amount,
+            currency=Currency.INR,
+            status=PaymentStatus.CAPTURED,
+            method=PaymentMethod.UPI,
+            created_at=p1_time + timedelta(minutes=5),
+            captured_at=p1_time + timedelta(minutes=6),
+            fee=p1_fee,
+            tax=p1_tax,
+            settlement_id=setl_id
+        )
+        
+        # Ensure STXN dates are identical for aggregation simplicity in this scenario
+        stxn_time = p1_payment.captured_at + timedelta(days=4)
+        
+        p1_stxn = SettlementTransaction(
+            settlement_txn_id=self.generate_id("stxn_"),
+            settlement_id=setl_id,
+            merchant_id=merchant.merchant_id,
+            entity_type=SettlementTransactionEntityType.PAYMENT,
+            entity_id=p1_payment.payment_id,
+            amount=p1_amount,
+            fee=p1_fee,
+            tax=p1_tax,
+            net_amount=p1_net,
+            type=SettlementTransactionType.CREDIT,
+            created_at=stxn_time
+        )
+        
+        # Day 2: P2
+        p2_amount = Decimal("5000.00")
+        p2_time = p1_time + timedelta(days=1)
+        p2_order = Order(
+            order_id=self.generate_id("order_"),
+            merchant_id=merchant.merchant_id,
+            amount=p2_amount,
+            currency=Currency.INR,
+            status=OrderStatus.PAID,
+            created_at=p2_time
+        )
+        
+        p2_fee = (p2_amount * fee_rate).quantize(Decimal("0.01"), rounding=rounding)
+        p2_tax = (p2_fee * tax_rate).quantize(Decimal("0.01"), rounding=rounding)
+        p2_net = p2_amount - p2_fee - p2_tax
+        
+        p2_payment = Payment(
+            payment_id=self.generate_id("pay_"),
+            order_id=p2_order.order_id,
+            merchant_id=merchant.merchant_id,
+            amount=p2_amount,
+            currency=Currency.INR,
+            status=PaymentStatus.CAPTURED,
+            method=PaymentMethod.UPI,
+            created_at=p2_time + timedelta(minutes=5),
+            captured_at=p2_time + timedelta(minutes=6),
+            fee=p2_fee,
+            tax=p2_tax,
+            settlement_id=setl_id
+        )
+        
+        p2_stxn = SettlementTransaction(
+            settlement_txn_id=self.generate_id("stxn_"),
+            settlement_id=setl_id,
+            merchant_id=merchant.merchant_id,
+            entity_type=SettlementTransactionEntityType.PAYMENT,
+            entity_id=p2_payment.payment_id,
+            amount=p2_amount,
+            fee=p2_fee,
+            tax=p2_tax,
+            net_amount=p2_net,
+            type=SettlementTransactionType.CREDIT,
+            created_at=stxn_time
+        )
+        
+        # Day 3: Adjustment A1
+        a1_amount = Decimal("-250.00")
+        a1_time = p1_time + timedelta(days=2)
+        
+        a1_adj = Adjustment(
+            adjustment_id=self.generate_id("adj_"),
+            merchant_id=merchant.merchant_id,
+            amount=a1_amount,
+            currency=Currency.INR,
+            reason="chargeback",
+            created_at=a1_time,
+            settlement_id=setl_id,
+            description="Mock chargeback debit"
+        )
+        
+        a1_stxn = SettlementTransaction(
+            settlement_txn_id=self.generate_id("stxn_"),
+            settlement_id=setl_id,
+            merchant_id=merchant.merchant_id,
+            entity_type=SettlementTransactionEntityType.ADJUSTMENT,
+            entity_id=a1_adj.adjustment_id,
+            amount=abs(a1_amount),
+            fee=Decimal("0.00"),
+            tax=Decimal("0.00"),
+            net_amount=a1_amount,
+            type=SettlementTransactionType.DEBIT,
+            created_at=stxn_time
+        )
+        
+        # Day 5: Settlement
+        stxns = [p1_stxn, p2_stxn, a1_stxn]
+        total_net = sum(stxn.net_amount for stxn in stxns)
+        total_fee = sum(stxn.fee for stxn in stxns)
+        total_tax = sum(stxn.tax for stxn in stxns)
+        
+        setl_time = stxn_time
+        utr = self.generate_utr()
+        
+        setl = Settlement(
+            settlement_id=setl_id,
+            merchant_id=merchant.merchant_id,
+            amount=total_net,
+            currency=Currency.INR,
+            status=SettlementStatus.PROCESSED,
+            fees=total_fee,
+            tax=total_tax,
+            created_at=setl_time,
+            utr=utr,
+            settled_at=setl_time
+        )
+        
+        # Day 6: Bank Entry
+        bank_entry_date = setl_time + timedelta(days=1)
+        bank_entry = BankEntry(
+            bank_entry_id=self.generate_id("bank_"),
+            merchant_id=merchant.merchant_id,
+            account_number="ACCT12345678",
+            amount=setl.amount,
+            currency=Currency.INR,
+            utr=utr,
+            transaction_date=bank_entry_date,
+            description=f"NEFT CR MOCK {setl_id}"
+        )
+        
+        label = ScenarioLabel(
+            settlement_id=setl_id,
+            scenario_type="adjustment_v1"
+        )
+        
+        eq = SettlementEquation(
+            settlement_id=setl_id,
+            expected_amount=total_net,
+            sum_of_net_amounts=total_net,
+            total_fees=total_fee,
+            total_tax=total_tax,
+            is_balanced=True
+        )
+        
+        return GroundTruth(
+            config=self.config,
+            merchants=[merchant],
+            orders=[p1_order, p2_order],
+            payments=[p1_payment, p2_payment],
+            adjustments=[a1_adj],
+            settlement_transactions=[p1_stxn, p2_stxn, a1_stxn],
+            settlements=[setl],
+            bank_entries=[bank_entry],
+            scenario_labels={setl_id: label},
+            settlement_equations={setl_id: eq}
         )

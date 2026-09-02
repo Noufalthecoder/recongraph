@@ -11,6 +11,8 @@ from backend.app.models.merchant import Merchant
 from backend.app.models.order import Order
 from backend.app.models.payment import Payment
 from backend.app.models.refund import Refund
+from backend.app.models.adjustment import Adjustment
+from backend.app.models.transfer import Transfer
 from backend.app.models.settlement_transaction import SettlementTransaction
 from backend.app.models.settlement import Settlement
 from backend.app.models.bank_entry import BankEntry
@@ -37,6 +39,8 @@ class GroundTruth(BaseModel):
     orders: List[Order]
     payments: List[Payment]
     refunds: List[Refund] = []
+    adjustments: List[Adjustment] = []
+    transfers: List[Transfer] = []
     settlement_transactions: List[SettlementTransaction]
     settlements: List[Settlement]
     bank_entries: List[BankEntry]
