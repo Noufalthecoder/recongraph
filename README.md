@@ -8,7 +8,9 @@ Trace payments, settlements, refunds and adjustments through one evidence-backed
 
 [Architecture](#system-architecture) • [Benchmark](#measured-not-claimed) • [Quick Start](#run-recongraph)
 
-![ReconGraph Financial Flow](./docs/assets/hero-visual.svg)
+<p align="center">
+  <img src="docs/assets/hero-visual.svg" alt="ReconGraph Financial Flow" width="100%">
+</p>
 
 ReconGraph reconstructs the financial journey behind a settlement, connecting payments, settlement transactions, refunds, adjustments and bank entries into an evidence-backed graph.
 
