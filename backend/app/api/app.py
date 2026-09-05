@@ -44,10 +44,11 @@ def create_app() -> FastAPI:
     app.include_router(investigation_router)
     app.include_router(benchmark_router)
 
-    # Serve static frontend if built
-    dist_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "dist")
-    if os.path.isdir(dist_dir):
-        app.mount("/", StaticFiles(directory=dist_dir, html=True), name="static")
+    # Serve static frontend if built (only when running locally, not in Vercel)
+    if not os.environ.get("VERCEL"):
+        dist_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "dist")
+        if os.path.isdir(dist_dir):
+            app.mount("/", StaticFiles(directory=dist_dir, html=True), name="static")
 
     return app
 

@@ -4,7 +4,7 @@ Settlement listing and drill-down investigation routes.
 
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from backend.app.api.demo_state import demo_state
 from backend.app.api.schemas import (
     ExceptionSummaryItem,
@@ -36,8 +36,8 @@ def _fmt_money(val: Any) -> Optional[str]:
 
 
 @router.get("", response_model=SettlementListResponse)
-def list_settlements():
-    bundle = demo_state.active_scenario
+def list_settlements(x_scenario_id: Optional[str] = Header(None)):
+    bundle = demo_state.get_scenario(x_scenario_id)
     obs = bundle.observed_world
     res = bundle.recon_result
     engine = bundle.query_engine
@@ -82,8 +82,8 @@ def list_settlements():
 
 
 @router.get("/{settlement_id}", response_model=SettlementDetailResponse)
-def get_settlement_detail(settlement_id: str):
-    bundle = demo_state.active_scenario
+def get_settlement_detail(settlement_id: str, x_scenario_id: Optional[str] = Header(None)):
+    bundle = demo_state.get_scenario(x_scenario_id)
     obs = bundle.observed_world
     engine = bundle.query_engine
 

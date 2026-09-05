@@ -195,11 +195,11 @@ def _build_scenario_bundle(
 class DemoStateManager:
     """
     Manages active scenario bundle, available scenario catalogue, and cached benchmark results.
+    Refactored to be stateless for serverless environments.
     """
 
     def __init__(self):
         self._scenarios_catalog: Dict[str, ScenarioBundle] = {}
-        self._active_scenario_id: str = "production_demo"
         self._benchmark_cache = None
         self._initialize()
 
@@ -368,13 +368,11 @@ class DemoStateManager:
         # Pre-compute authoritative benchmark evaluation
         self._benchmark_cache = BenchmarkRunner().run()
 
-    @property
-    def active_scenario(self) -> ScenarioBundle:
-        return self._scenarios_catalog[self._active_scenario_id]
-
-    @property
-    def active_scenario_id(self) -> str:
-        return self._active_scenario_id
+    def get_scenario(self, scenario_id: Optional[str]) -> ScenarioBundle:
+        """Returns the requested scenario bundle, defaulting to production_demo."""
+        if not scenario_id or scenario_id not in self._scenarios_catalog:
+            return self._scenarios_catalog["production_demo"]
+        return self._scenarios_catalog[scenario_id]
 
     @property
     def scenarios_catalog(self) -> Dict[str, ScenarioBundle]:
@@ -383,12 +381,6 @@ class DemoStateManager:
     @property
     def benchmark_result(self):
         return self._benchmark_cache
-
-    def set_active_scenario(self, scenario_id: str) -> bool:
-        if scenario_id in self._scenarios_catalog:
-            self._active_scenario_id = scenario_id
-            return True
-        return False
 
 
 # Global singleton instance for demo application

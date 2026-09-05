@@ -2,8 +2,8 @@
 Financial relationship graph routes.
 """
 
-from typing import List
-from fastapi import APIRouter, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Header
 from backend.app.api.demo_state import demo_state
 from backend.app.api.schemas import GraphEdgeDTO, GraphNodeDTO, GraphResponse
 
@@ -11,8 +11,8 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 
 @router.get("", response_model=GraphResponse)
-def get_full_graph():
-    bundle = demo_state.active_scenario
+def get_full_graph(x_scenario_id: Optional[str] = Header(None)):
+    bundle = demo_state.get_scenario(x_scenario_id)
     graph = bundle.graph
     ev_layer = bundle.evidence_layer
 
@@ -52,8 +52,8 @@ def get_full_graph():
 
 
 @router.get("/settlements/{settlement_id}", response_model=GraphResponse)
-def get_settlement_subgraph(settlement_id: str):
-    bundle = demo_state.active_scenario
+def get_settlement_subgraph(settlement_id: str, x_scenario_id: Optional[str] = Header(None)):
+    bundle = demo_state.get_scenario(x_scenario_id)
     inv = bundle.query_engine.get_settlement_investigation(settlement_id)
     ev_layer = bundle.evidence_layer
 

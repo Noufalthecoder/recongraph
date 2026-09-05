@@ -2,8 +2,8 @@
 AI Investigation endpoint.
 """
 
-from typing import Any, Dict, List
-from fastapi import APIRouter
+from typing import Any, Dict, List, Optional
+from fastapi import APIRouter, Header
 from backend.app.api.demo_state import demo_state
 from backend.app.api.schemas import (
     InvestigationRequestDTO,
@@ -20,8 +20,8 @@ router = APIRouter(prefix="/api/investigation", tags=["investigation"])
 
 
 @router.post("", response_model=InvestigationResponseDTO)
-def run_investigation(req: InvestigationRequestDTO):
-    bundle = demo_state.active_scenario
+def run_investigation(req: InvestigationRequestDTO, x_scenario_id: Optional[str] = Header(None)):
+    bundle = demo_state.get_scenario(x_scenario_id)
     tools = bundle.tools
 
     provider, provider_mode = get_investigation_provider()

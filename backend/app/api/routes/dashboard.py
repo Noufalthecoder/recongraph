@@ -4,7 +4,7 @@ Dashboard summary and KPI endpoints.
 
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from backend.app.api.demo_state import demo_state
 from backend.app.api.schemas import (
     DashboardKPIs,
@@ -28,8 +28,8 @@ def _fmt_money(val: Any) -> Optional[str]:
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
-def get_dashboard():
-    bundle = demo_state.active_scenario
+def get_dashboard(x_scenario_id: Optional[str] = Header(None)):
+    bundle = demo_state.get_scenario(x_scenario_id)
     obs = bundle.observed_world
     res = bundle.recon_result
 
