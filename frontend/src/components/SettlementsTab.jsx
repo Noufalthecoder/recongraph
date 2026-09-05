@@ -18,12 +18,11 @@ export default function SettlementsTab({ settlements = [], onSelectSettlement })
   return (
     <div>
       {/* Page Hero */}
-      <div className="page-hero">
-        <div>
-          <h1 className="hero-title">Settlement Payouts</h1>
-          <p className="hero-subtitle">Batch payout aggregations and bank-side statement credit tracking.</p>
-        </div>
-      </div>
+      {/* Page Hero */}
+      <section className="editorial-section" style={{ marginBottom: '4rem' }}>
+        <h1 className="oversized-heading" style={{ fontSize: '3rem' }}>SETTLEMENTS</h1>
+        <p className="editorial-copy">"Every payout, traced." Batch payout aggregations and bank-side statement credit tracking.</p>
+      </section>
 
       {/* Filter and Search Bar */}
       <div
@@ -66,7 +65,7 @@ export default function SettlementsTab({ settlements = [], onSelectSettlement })
       </div>
 
       {/* Settlements Table */}
-      <div className="panel-card" style={{ padding: '0.5rem' }}>
+      <div className="panel-flat" style={{ padding: '0' }}>
         <div className="table-container">
           <table className="custom-table">
             <thead>
@@ -117,17 +116,13 @@ export default function SettlementsTab({ settlements = [], onSelectSettlement })
                     </td>
                     <td className="mono">{s.transaction_count} items</td>
                     <td>
-                      <span
-                        className={`badge ${
-                          s.status === 'RECONCILED'
-                            ? 'badge-reconciled'
-                            : s.status === 'EXCEPTION'
-                            ? 'badge-exception'
-                            : 'badge-unmatched'
-                        }`}
-                      >
-                        {s.status === 'RECONCILED' && <CheckCircle2 size={12} />}
-                        {s.status === 'EXCEPTION' && <AlertTriangle size={12} />}
+                      <span className={`status-text ${
+                          s.status === 'RECONCILED' ? 'status-reconciled'
+                          : s.status === 'EXCEPTION' ? 'status-exception'
+                          : 'status-unmatched'
+                        }`}>
+                        {s.status === 'RECONCILED' && <CheckCircle2 size={14} />}
+                        {s.status === 'EXCEPTION' && <AlertTriangle size={14} />}
                         {s.status}
                       </span>
                     </td>
@@ -136,13 +131,8 @@ export default function SettlementsTab({ settlements = [], onSelectSettlement })
                     </td>
                     <td>
                       <button
-                        className="nav-tab-btn"
-                        style={{
-                          padding: '0.35rem 0.75rem',
-                          fontSize: '0.75rem',
-                          background: 'rgba(59, 130, 246, 0.15)',
-                          color: '#60a5fa',
-                        }}
+                        className="btn-secondary"
+                        style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectSettlement(s.settlement_id);

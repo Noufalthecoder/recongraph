@@ -11,10 +11,10 @@ from backend.app.api.schemas import (
 )
 from backend.app.investigation import (
     AIInvestigationAgent,
-    DeterministicMockProvider,
     InvestigationRequest,
     InvestigationToolRegistry,
 )
+from backend.app.investigation.providers import get_investigation_provider
 
 router = APIRouter(prefix="/api/investigation", tags=["investigation"])
 
@@ -24,7 +24,8 @@ def run_investigation(req: InvestigationRequestDTO):
     bundle = demo_state.active_scenario
     tools = bundle.tools
 
-    agent = AIInvestigationAgent(tool_registry=tools, provider=DeterministicMockProvider())
+    provider, provider_mode = get_investigation_provider()
+    agent = AIInvestigationAgent(tool_registry=tools, provider=provider)
 
     inv_req = InvestigationRequest(
         question=req.question,
@@ -47,7 +48,7 @@ def run_investigation(req: InvestigationRequestDTO):
         elif in_finding and line.strip():
             finding_lines.append(line.strip())
 
-    finding_str = " ".join(finding_lines) if finding_lines else ans.answer[:200]
+    finding_str = " ".join(finding_lines) if finding_lines else ans.answer
 
     # Extract affected records list
     aff_records = []
@@ -65,6 +66,7 @@ def run_investigation(req: InvestigationRequestDTO):
         question=req.question,
         status=ans.status.value,
         confidence=ans.confidence.value,
+        provider_mode=provider_mode,
         answer=ans.answer,
         finding=finding_str,
         evidence=ans.evidence,

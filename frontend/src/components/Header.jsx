@@ -1,24 +1,33 @@
 import React from 'react';
-import { Layers, ShieldCheck, Activity, Brain, BarChart3, Info, GitFork } from 'lucide-react';
 
 export default function Header({
   activeTab,
   setActiveTab,
-  scenarios = [],
+  scenarios,
   activeScenarioId,
   onSelectScenario,
-  exceptionCount = 0,
-  onOpenArchitecture,
 }) {
+  const tabs = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'settlements', label: 'Settlements' },
+    { id: 'exceptions', label: 'Exceptions' },
+    { id: 'investigator', label: 'Investigator' },
+    { id: 'benchmark', label: 'Benchmark' },
+  ];
+
   return (
     <header className="app-header">
       <div className="header-inner">
-        {/* Brand Section */}
+        {/* Brand */}
         <div className="brand-section">
-          <div className="brand-logo" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('overview')}>
-            <div className="logo-badge">
-              <Layers size={20} />
-            </div>
+          <div className="brand-logo" onClick={() => setActiveTab('overview')} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="6" cy="6" r="3" fill="#38bdf8" />
+              <circle cx="18" cy="18" r="3" fill="#10b981" />
+              <circle cx="6" cy="18" r="3" fill="#fbbf24" />
+              <path d="M 6 9 L 6 15" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+              <path d="M 8 7.5 L 16 16.5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" />
+            </svg>
             <div>
               <div className="brand-title">RECONGRAPH</div>
               <div className="brand-subtitle">Financial Reconciliation Intelligence</div>
@@ -26,78 +35,35 @@ export default function Header({
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Navigation */}
         <nav className="nav-tabs">
-          <button
-            className={`nav-tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-          >
-            <Activity size={15} />
-            Overview
-          </button>
-
-          <button
-            className={`nav-tab-btn ${activeTab === 'settlements' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settlements')}
-          >
-            <GitFork size={15} />
-            Settlements
-          </button>
-
-          <button
-            className={`nav-tab-btn ${activeTab === 'exceptions' ? 'active' : ''}`}
-            onClick={() => setActiveTab('exceptions')}
-          >
-            <ShieldCheck size={15} />
-            Exceptions
-            {exceptionCount > 0 && <span className="tab-badge">{exceptionCount}</span>}
-          </button>
-
-          <button
-            className={`nav-tab-btn ${activeTab === 'investigator' ? 'active' : ''}`}
-            onClick={() => setActiveTab('investigator')}
-          >
-            <Brain size={15} />
-            AI Investigator
-          </button>
-
-          <button
-            className={`nav-tab-btn ${activeTab === 'benchmark' ? 'active' : ''}`}
-            onClick={() => setActiveTab('benchmark')}
-          >
-            <BarChart3 size={15} />
-            Benchmark
-          </button>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`nav-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
         </nav>
 
-        {/* Header Right Controls */}
+        {/* Controls */}
         <div className="header-controls">
-          <button
-            className="nav-tab-btn"
-            style={{ padding: '0.45rem 0.75rem', background: 'rgba(255,255,255,0.04)', fontSize: '0.8rem' }}
-            onClick={onOpenArchitecture}
-            title="View Architecture Pipeline"
-          >
-            <Info size={15} />
-            Architecture
-          </button>
-
           <select
             className="scenario-select"
             value={activeScenarioId}
             onChange={(e) => onSelectScenario(e.target.value)}
-            title="Switch Demo Scenario"
           >
             {scenarios.map((sc) => (
-              <option key={sc.scenario_id} value={sc.scenario_id}>
-                {sc.name}
+              <option key={sc.id} value={sc.id}>
+                {sc.label}
               </option>
             ))}
           </select>
-
           <div className="status-indicator">
-            <div className="status-dot" />
-            <span>SYSTEM OPERATIONAL</span>
+            <div className="status-dot"></div>
+            System Operational
           </div>
         </div>
       </div>

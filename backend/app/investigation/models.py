@@ -63,6 +63,7 @@ class InvestigationAnswer(BaseModel):
     answer: str
     status: InvestigationStatus
     confidence: InvestigationConfidence
+    provider_mode: str = "deterministic"
     evidence: List[Dict[str, Any]] = Field(default_factory=list)
     tool_calls: List[InvestigationToolCall] = Field(default_factory=list)
     facts: Dict[str, Any] = Field(default_factory=dict)

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Header from './components/Header.jsx';
+import Sidebar from './components/Sidebar.jsx';
 import OverviewTab from './components/OverviewTab.jsx';
 import SettlementsTab from './components/SettlementsTab.jsx';
 import SettlementInvestigationTab from './components/SettlementInvestigationTab.jsx';
@@ -28,13 +29,15 @@ export default function App() {
   const [settlementSubgraph, setSettlementSubgraph] = useState(null);
   const [settlementLoading, setSettlementLoading] = useState(false);
   const [settlementError, setSettlementError] = useState(null);
-  const latestSettlementRequestRef = React.useRef(null);
+  const settlementRequestIdRef = React.useRef(0);
   const [benchmarkData, setBenchmarkData] = useState(null);
   const [exceptionsFilter, setExceptionsFilter] = useState('ALL');
   const [investigatorPreset, setInvestigatorPreset] = useState({ question: '', type: null, id: null });
   const [isArchitectureModalOpen, setIsArchitectureModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState(null);
+  const [switchingScenario, setSwitchingScenario] = useState(false);
+  const [scenarioError, setScenarioError] = useState(null);
 
   // Initial Data Load
   const refreshAllData = async () => {
@@ -66,16 +69,19 @@ export default function App() {
 
   // Scenario Switcher
   const handleSelectScenario = async (scId) => {
+    if (switchingScenario) return; // Prevent duplicate requests
     try {
+      setSwitchingScenario(true);
+      setScenarioError(null);
       setLoading(true);
-      latestSettlementRequestRef.current = null;
+      settlementRequestIdRef.current += 1;
       setSelectedSettlementId(null);
       setSettlementDetail(null);
       setSettlementSubgraph(null);
       setSettlementLoading(false);
       setSettlementError(null);
-      if (activeTab === 'settlement_investigation') {
-        setActiveTab('settlements');
+      if (activeTab === 'settlement_investigation' || activeTab === 'investigator') {
+        setActiveTab('overview');
       }
 
       await loadScenario(scId);
@@ -83,15 +89,17 @@ export default function App() {
       await refreshAllData();
     } catch (err) {
       console.error('Failed to switch scenario:', err);
+      setScenarioError('Unable to switch dataset');
     } finally {
       setLoading(false);
+      setSwitchingScenario(false);
     }
   };
 
   // Drill down into Settlement Investigation
   const handleSelectSettlement = async (setlId) => {
     if (!setlId) return;
-    latestSettlementRequestRef.current = setlId;
+    const reqId = ++settlementRequestIdRef.current;
     setSelectedSettlementId(setlId);
     setSettlementLoading(true);
     setSettlementError(null);
@@ -106,7 +114,7 @@ export default function App() {
       ]);
 
       // Protect against race conditions / stale out-of-order responses
-      if (latestSettlementRequestRef.current !== setlId) {
+      if (settlementRequestIdRef.current !== reqId) {
         return;
       }
 
@@ -123,11 +131,11 @@ export default function App() {
         setSettlementError(errorMsg);
       }
     } catch (err) {
-      if (latestSettlementRequestRef.current === setlId) {
+      if (settlementRequestIdRef.current === reqId) {
         setSettlementError(err.message || `Failed to fetch settlement ${setlId}`);
       }
     } finally {
-      if (latestSettlementRequestRef.current === setlId) {
+      if (settlementRequestIdRef.current === reqId) {
         setSettlementLoading(false);
       }
     }
@@ -152,86 +160,103 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
-      {/* Global Header */}
-      <Header
-        activeTab={activeTab === 'settlement_investigation' ? 'settlements' : activeTab}
-        setActiveTab={setActiveTab}
-        scenarios={scenarios}
-        activeScenarioId={activeScenarioId}
-        onSelectScenario={handleSelectScenario}
-        exceptionCount={dashboardData?.kpis?.exception_count || 0}
-        onOpenArchitecture={() => setIsArchitectureModalOpen(true)}
-      />
-
-      {/* Backend Unavailable Error Banner */}
-      {apiError && (
-        <div style={{ maxWidth: '1560px', margin: '1rem auto 0', padding: '1rem 2rem', width: '100%' }}>
-          <div className="panel-card" style={{ border: '1px solid #f43f5e', background: 'rgba(244, 63, 94, 0.1)', color: '#fb7185' }}>
-            <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '0.25rem' }}>Backend Service Unavailable</h3>
-            <p style={{ fontSize: '0.85rem' }}>Start the ReconGraph FastAPI server (`uvicorn backend.app.api.app:app`) to connect.</p>
-          </div>
-        </div>
+    <div className={`app-container ${activeTab !== 'overview' ? 'has-sidebar' : ''}`}>
+      {activeTab !== 'overview' && (
+        <Sidebar
+          activeTab={activeTab === 'settlement_investigation' ? 'settlements' : activeTab}
+          setActiveTab={setActiveTab}
+          scenarios={scenarios}
+          activeScenarioId={activeScenarioId}
+          onSelectScenario={handleSelectScenario}
+          isSwitching={switchingScenario}
+          scenarioError={scenarioError}
+          exceptionCount={dashboardData?.kpis?.exception_count || 0}
+          onOpenArchitecture={() => setIsArchitectureModalOpen(true)}
+        />
       )}
+      
+      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' }}>
 
-      {/* Main Screen Content */}
-      <main className="main-content">
-        {activeTab === 'overview' && (
-          <OverviewTab
-            dashboardData={dashboardData}
-            onSelectSettlement={handleSelectSettlement}
-            onInvestigateException={handleInvestigateException}
-            onNavigateExceptions={handleNavigateExceptions}
-          />
+
+        {/* Backend Unavailable Error Banner */}
+        {apiError && (
+          <div style={{ maxWidth: '1560px', margin: '1rem auto 0', padding: '1rem 2rem', width: '100%' }}>
+            <div className="panel-card" style={{ border: '1px solid #f43f5e', background: 'rgba(244, 63, 94, 0.1)', color: '#fb7185' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '0.25rem' }}>Backend Service Unavailable</h3>
+              <p style={{ fontSize: '0.85rem' }}>Start the ReconGraph FastAPI server (`uvicorn backend.app.api.app:app`) to connect.</p>
+            </div>
+          </div>
         )}
 
-        {activeTab === 'settlements' && (
-          <SettlementsTab
-            settlements={settlements}
-            onSelectSettlement={handleSelectSettlement}
-          />
-        )}
+        {/* Main Screen Content */}
+        <main className="main-content">
+          {activeTab === 'overview' && (
+            <OverviewTab
+              dashboardData={dashboardData}
+              benchmarkData={benchmarkData}
+              firstSettlementId={settlements?.[0]?.id}
+              onSelectSettlement={handleSelectSettlement}
+              onInvestigateException={handleInvestigateException}
+              onNavigateExceptions={handleNavigateExceptions}
+              setActiveTab={setActiveTab}
+            />
+          )}
 
-        {activeTab === 'settlement_investigation' && (
-          <SettlementInvestigationTab
-            settlementId={selectedSettlementId}
-            settlementDetail={settlementDetail}
-            subgraph={settlementSubgraph}
-            loading={settlementLoading}
-            error={settlementError}
-            onRetry={handleSelectSettlement}
-            onBack={() => setActiveTab('settlements')}
-            onOpenAIInvestigator={handleOpenAIInvestigator}
-          />
-        )}
+          {activeTab === 'settlements' && (
+            <SettlementsTab
+              settlements={settlements}
+              onSelectSettlement={handleSelectSettlement}
+            />
+          )}
 
-        {activeTab === 'exceptions' && (
-          <ExceptionsTab
-            exceptions={dashboardData?.recent_exceptions || []}
-            initialFilter={exceptionsFilter}
-            onInvestigateException={handleInvestigateException}
-            onSelectSettlement={handleSelectSettlement}
-          />
-        )}
+          {activeTab === 'settlement_investigation' && (
+            <SettlementInvestigationTab
+              settlementId={selectedSettlementId}
+              settlementDetail={settlementDetail}
+              subgraph={settlementSubgraph}
+              loading={settlementLoading}
+              error={settlementError}
+              onRetry={handleSelectSettlement}
+              onBack={() => setActiveTab('settlements')}
+              onOpenAIInvestigator={handleOpenAIInvestigator}
+            />
+          )}
 
-        {activeTab === 'investigator' && (
-          <InvestigatorTab
-            initialQuestion={investigatorPreset.question}
-            targetType={investigatorPreset.type}
-            targetId={investigatorPreset.id}
-          />
-        )}
+          {activeTab === 'exceptions' && (
+            <ExceptionsTab
+              exceptions={dashboardData?.recent_exceptions || []}
+              initialFilter={exceptionsFilter}
+              onInvestigateException={handleInvestigateException}
+              onSelectSettlement={handleSelectSettlement}
+            />
+          )}
 
-        {activeTab === 'benchmark' && (
-          <BenchmarkTab benchmarkData={benchmarkData} />
-        )}
-      </main>
+          {activeTab === 'investigator' && (
+            <InvestigatorTab
+              initialQuestion={investigatorPreset.question}
+              targetType={investigatorPreset.type}
+              targetId={investigatorPreset.id}
+            />
+          )}
 
-      {/* Architecture Modal */}
-      <ArchitectureModal
-        isOpen={isArchitectureModalOpen}
-        onClose={() => setIsArchitectureModalOpen(false)}
-      />
+          {activeTab === 'benchmark' && (
+            <BenchmarkTab
+              benchmarkData={benchmarkData}
+              loading={loading}
+              error={apiError}
+              onRetry={refreshAllData}
+              onNavigateExceptions={handleNavigateExceptions}
+              onBackToOverview={() => setActiveTab('overview')}
+            />
+          )}
+        </main>
+
+        {/* Architecture Modal */}
+        <ArchitectureModal
+          isOpen={isArchitectureModalOpen}
+          onClose={() => setIsArchitectureModalOpen(false)}
+        />
+      </div>
     </div>
   );
 }

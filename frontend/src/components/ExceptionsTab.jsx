@@ -19,12 +19,11 @@ export default function ExceptionsTab({ exceptions = [], onInvestigateException,
   return (
     <div>
       {/* Page Hero */}
-      <div className="page-hero">
-        <div>
-          <h1 className="hero-title">Exception Operations Queue</h1>
-          <p className="hero-subtitle">Deterministic reconciliation rule breaks, ledger shortfalls, and identity mismatches.</p>
-        </div>
-      </div>
+      {/* Page Hero */}
+      <section className="editorial-section" style={{ marginBottom: '3rem' }}>
+        <h1 className="oversized-heading" style={{ fontSize: '3rem' }}>EXCEPTIONS</h1>
+        <p className="editorial-copy">"Find the break. Follow the evidence." Deterministic reconciliation rule breaks, ledger shortfalls, and identity mismatches.</p>
+      </section>
 
       {/* Severity Counters & Filter Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '1rem' }}>
@@ -64,9 +63,9 @@ export default function ExceptionsTab({ exceptions = [], onInvestigateException,
 
       {/* Exceptions List */}
       {filteredExceptions.length === 0 ? (
-        <div className="panel-card" style={{ padding: '3.5rem', textAlign: 'center', color: '#64748b' }}>
+        <div className="panel-flat" style={{ padding: '3.5rem', textAlign: 'center', color: '#64748b' }}>
           <ShieldCheck size={40} color="#10b981" style={{ margin: '0 auto 0.75rem' }} />
-          <h3 style={{ color: '#fff', marginBottom: '0.35rem' }}>No Exceptions in Selected View</h3>
+          <h3 style={{ color: '#fff', marginBottom: '0.35rem', fontSize: '1.25rem' }}>No Exceptions in Selected View</h3>
           <p style={{ fontSize: '0.85rem' }}>The active dataset contains zero exceptions matching this filter criteria.</p>
         </div>
       ) : (
@@ -112,7 +111,7 @@ export default function ExceptionsTab({ exceptions = [], onInvestigateException,
               <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
                 {exc.settlement_id && (
                   <button
-                    className="nav-tab-btn"
+                    className="btn-secondary"
                     style={{ fontSize: '0.75rem', padding: '0.45rem 0.8rem' }}
                     onClick={() => onSelectSettlement(exc.settlement_id)}
                   >
@@ -121,12 +120,11 @@ export default function ExceptionsTab({ exceptions = [], onInvestigateException,
                 )}
 
                 <button
-                  className="ai-submit-btn"
+                  className="btn-primary"
                   style={{ fontSize: '0.75rem', padding: '0.45rem 0.95rem' }}
                   onClick={() => onInvestigateException(exc)}
                 >
-                  <Brain size={13} />
-                  Why? (AI)
+                  Why? AI <ArrowRight size={13} />
                 </button>
               </div>
             </div>

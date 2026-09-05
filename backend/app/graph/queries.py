@@ -113,6 +113,32 @@ class InvestigationQueryEngine:
             "transfers_count": len(transfers),
             "bank_entry_id": bank_entries[0].entity_id if bank_entries else None,
             "bank_amount": str(bank_amount) if bank_amount is not None else None,
+            "constituent_payments": [
+                {
+                    "entity_id": p.entity_id,
+                    "amount": str(p.attributes.get("amount", "0.00")),
+                    "fee": str(p.attributes.get("fee", "0.00")),
+                    "tax": str(p.attributes.get("tax", "0.00")),
+                    "status": p.attributes.get("status"),
+                }
+                for p in payments
+            ],
+            "constituent_refunds": [
+                {
+                    "entity_id": r.entity_id,
+                    "amount": str(r.attributes.get("amount", "0.00")),
+                    "status": r.attributes.get("status"),
+                }
+                for r in refunds
+            ],
+            "constituent_adjustments": [
+                {
+                    "entity_id": a.entity_id,
+                    "amount": str(a.attributes.get("amount", "0.00")),
+                    "reason": a.attributes.get("reason"),
+                }
+                for a in adjustments
+            ],
             "mathematical_breakdown": {
                 "payments_net_total": str(payments_net),
                 "refunds_net_total": str(refunds_net),
@@ -159,14 +185,33 @@ class InvestigationQueryEngine:
         evidence = self.evidence_layer.get_node_evidence(pay_node_id)
         exceptions = self.evidence_layer.get_node_exceptions(pay_node_id)
 
+        pay_amt = Decimal(target_node.attributes.get("amount", "0.00"))
+        fee_amt = Decimal(target_node.attributes.get("fee", "0.00"))
+        tax_amt = Decimal(target_node.attributes.get("tax", "0.00"))
+        net_amt = pay_amt - fee_amt - tax_amt
+
+        # Find linked settlement and bank entry
+        setl_id = target_node.attributes.get("settlement_id")
+        bank_utr = None
+        bank_entry_id = None
+        for n in nodes:
+            if n.entity_type == "settlement" and not setl_id:
+                setl_id = n.entity_id
+            elif n.entity_type == "bank_entry":
+                bank_entry_id = n.entity_id
+                bank_utr = n.attributes.get("utr")
+
         summary_facts = {
             "payment_id": payment_id,
             "order_id": target_node.attributes.get("order_id"),
             "merchant_id": target_node.attributes.get("merchant_id"),
-            "amount": target_node.attributes.get("amount"),
-            "fee": target_node.attributes.get("fee"),
-            "tax": target_node.attributes.get("tax"),
-            "settlement_id": target_node.attributes.get("settlement_id"),
+            "amount": str(pay_amt),
+            "fee": str(fee_amt),
+            "tax": str(tax_amt),
+            "net_amount": str(net_amt),
+            "settlement_id": setl_id,
+            "bank_entry_id": bank_entry_id,
+            "utr": bank_utr or target_node.attributes.get("utr"),
             "status": target_node.attributes.get("status"),
         }
 

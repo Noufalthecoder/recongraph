@@ -159,6 +159,7 @@ class InvestigationResponseDTO(BaseModel):
     question: str
     status: str
     confidence: str
+    provider_mode: str
     answer: str
     finding: str
     evidence: List[Dict[str, Any]]
